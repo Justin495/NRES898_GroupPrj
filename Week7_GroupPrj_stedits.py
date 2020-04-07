@@ -42,24 +42,64 @@ def weatherdf (siteList,startDate,endDate):
     #df.info()
     return df
 
+
+
 print(f'1. Daily climate data for stations {" & ".join(str(x) for x in siteList)} between {startDate} and {endDate}:')
 print(weatherdf(siteList,startDate,endDate))
 
+dff = weatherdf(siteList,startDate,endDate)
 
-
-pentadMean = df.groupby(['site']).resample('5D').mean()
+pentadMean = dff.groupby(['site']).resample('5D').mean()
 print(f'2.  Pentad mean climate data for stations {" & ".join(str(x) for x in siteList)} between {startDate} and {endDate}:')
 print(pentadMean)
 
+############################################################################################
+######### part 3 - monthly mean climate data for a given county for a given period #########
+############################################################################################
+
+# County FIPS Codes: https://www.nrcs.usda.gov/wps/portal/nrcs/detail/national/home/?cid=nrcs143_013697
+countyNumber = 31109  # Lancaster County
 
 # import list of weather stations in Lancaster county
 columnNames=['station_id','name','state','longitude','latitude','elevation']
-countydf = pd.read_csv("http://data.rcc-acis.org/StnMeta?county=31109&output=csv",sep=",",names = columnNames)
+countySites = pd.read_csv(f'http://data.rcc-acis.org/StnMeta?county={countyNumber}&output=csv',sep=",",names = columnNames)
 
-#need help here. This may not work, but thought by creating a definition for the df creation, question 3 would be simpler
-#just need to 'station_id' column into siteList
-#print(weatherdf(___________,startDate,endDate))
+countySites.head(20)
+countySites.info()
 
-monthlyMean = df.groupby(['site']).resample('M').mean()
-print(monthlyMean)
+#myCountySites = countySites['station_id'].tolist() #get list of county sites
+appendedCounty_df = []
+
+for index, row in countySites.iterrows():
+# for coSite in myCountySites:    
+    concatCountyStnURL = f'http://data.rcc-acis.org/StnData?sid={row.station_id}&sdate={startDate}&edate={endDate}&elems=1,2,4&output=csv'
+    newCountyData = pd.read_csv(concatURL,sep=',',skiprows=1,header=None)
+    newCountyData['countySite'] = row.station_id     # add column to identifiy the site for this data
+    appendedCounty_df.append(newCountyData) # list of separate data frames, one for each site    
+
+
+county_df = pd.concat(appendedCounty_df)     # combine list of separate data frames into a single dataframe
+
+county_df.columns = ['date','maxTemp','minTemp','precip','countySite']
+
+county_df.info()
+
+
+# convert weather data to numeric and date to datetime
+# also handle errors as some data may be reported as 
+# "missing data values are returned as 'M' and trace values of
+# precipitation, snowfall or snow depth are returned as 'T'"
+county_df.minTemp = pd.to_numeric(county_df.minTemp, errors='coerce')
+county_df.maxTemp = pd.to_numeric(county_df.maxTemp, errors='coerce')
+county_df.precip = pd.to_numeric(county_df.precip, errors='coerce')
+county_df.date = pd.to_datetime(county_df.date)
+
+county_df.set_index('date',inplace=True)
+
+county_df.info()
+
+monthlyCountyMean = county_df.groupby(['countySite']).resample('M').mean()
+countyMean = county_df.mean()
+print(monthlyCountyMean)
+print(countyMean)
 
